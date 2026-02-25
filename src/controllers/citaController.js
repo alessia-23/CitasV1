@@ -6,13 +6,13 @@ import mongoose from "mongoose";
 // CREAR CITA
 const crearCita = async (req, res) => {
     try {
-        const { codigo, descripcion, paciente, especialidad } = req.body;
-        // Validar campos obligatorios
+        let { codigo, descripcion, paciente, especialidad } = req.body;
         if (!codigo || !descripcion || !paciente || !especialidad) {
             return res.status(400).json({
                 msg: "Campos obligatorios incompletos"
             });
         }
+        codigo = codigo.trim();
         // Validar ObjectId
         if (
             !mongoose.Types.ObjectId.isValid(paciente) ||
@@ -22,7 +22,7 @@ const crearCita = async (req, res) => {
                 msg: "ID de paciente o especialidad no válido"
             });
         }
-        //  Verificar existencia de paciente y especialidad
+        // Verificar existencia
         const [existePaciente, existeEspecialidad] = await Promise.all([
             Paciente.findById(paciente),
             Especialidad.findById(especialidad)
@@ -32,9 +32,9 @@ const crearCita = async (req, res) => {
                 msg: "Paciente o especialidad no encontrados"
             });
         }
-        //  Validar duplicado por código
-        const yaExisteCodigo = await Cita.findOne({ codigo });
-        if (yaExisteCodigo) {
+        // Validar código único
+        const codigoExiste = await Cita.findOne({ codigo });
+        if (codigoExiste) {
             return res.status(400).json({
                 msg: "El código de la cita ya está en uso"
             });
@@ -46,15 +46,17 @@ const crearCita = async (req, res) => {
                 msg: "Este paciente ya tiene una cita en esta especialidad"
             });
         }
-        const cita = await Cita.create({ codigo, descripcion, paciente, especialidad });
+        const cita = await Cita.create({
+            codigo,
+            descripcion,
+            paciente,
+            especialidad
+        });
         res.status(201).json({
             msg: "Cita creada correctamente",
             cita
         });
     } catch (error) {
-        if (error.name === "ValidationError") {
-            return res.status(400).json({ msg: error.message });
-        }
         console.error(error);
         res.status(500).json({
             msg: "Error del servidor al crear cita"
@@ -138,18 +140,28 @@ const actualizarCita = async (req, res) => {
     try {
         const { id } = req.params;
         if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({
-                msg: "ID no válido"
-            });
+            return res.status(400).json({ msg: "ID no válido" });
         }
         const cita = await Cita.findById(id);
         if (!cita) {
-            return res.status(404).json({
-                msg: "Cita no encontrada"
-            });
+            return res.status(404).json({ msg: "Cita no encontrada" });
         }
-        const { codigo, descripcion, paciente, especialidad } = req.body;
-        // Validar paciente si viene
+        let { codigo, descripcion, paciente, especialidad } = req.body;
+        //  Validar código único si viene
+        if (codigo) {
+            codigo = codigo.trim();
+            const codigoExiste = await Cita.findOne({
+                codigo,
+                _id: { $ne: id }
+            });
+            if (codigoExiste) {
+                return res.status(400).json({
+                    msg: "El código ya está en uso"
+                });
+            }
+            cita.codigo = codigo;
+        }
+        //  Validar paciente
         if (paciente) {
             if (!mongoose.Types.ObjectId.isValid(paciente)) {
                 return res.status(400).json({
@@ -164,7 +176,7 @@ const actualizarCita = async (req, res) => {
             }
             cita.paciente = paciente;
         }
-        // Validar especialidad si viene
+        // Validar especialidad
         if (especialidad) {
             if (!mongoose.Types.ObjectId.isValid(especialidad)) {
                 return res.status(400).json({
@@ -179,7 +191,7 @@ const actualizarCita = async (req, res) => {
             }
             cita.especialidad = especialidad;
         }
-        // Validar duplicado después del cambio
+        // Validar duplicado paciente + especialidad
         const yaExiste = await Cita.findOne({
             paciente: cita.paciente,
             especialidad: cita.especialidad,
@@ -190,14 +202,16 @@ const actualizarCita = async (req, res) => {
                 msg: "Ya existe una cita con este paciente y especialidad"
             });
         }
-        if (codigo) cita.codigo = codigo;
-        if (descripcion) cita.descripcion = descripcion;
+        if (descripcion !== undefined) {
+            cita.descripcion = descripcion;
+        }
         await cita.save();
         res.json({
             msg: "Cita actualizada correctamente",
             cita
         });
     } catch (error) {
+        console.error(error);
         res.status(500).json({
             msg: "Error del servidor al actualizar cita"
         });
