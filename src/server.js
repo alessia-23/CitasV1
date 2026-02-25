@@ -1,7 +1,12 @@
 // Importaciones
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 
+// Importación de rutas
+import authRoutes from './routes/authRoutes.js';
+import pacientesRoutes from './routes/pacienteRoutes.js';
 // Inicialización
 const app = express();
 
@@ -14,6 +19,9 @@ app.use(cors());
 app.get('/', (req, res) => {
 res.send('Server on');
 });
+// Rutas
+app.use('/api/auth', authRoutes); // Ruta login y registro
+app.use('/api/pacientes',pacientesRoutes); // Rutas CRUD de pacientes
 
 // Exportar app
 export default app;
